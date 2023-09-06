@@ -1,0 +1,45 @@
+---
+title: "Análise de Partidas de Counter Strike"
+output: html_notebook
+author: 
+  - Pedro Paulo S. Rabelo
+  - Joao Victor R. V. Godoi
+---
+
+# Introdução
+
+Neste relatório, iremos analisar os dados das partidas do jogo Counter Strike. O nosso objetivo é calcular a porcentagem e a quantidade de rounds jogados por mapa no jogo.
+
+## Carregando os Dados
+
+Começamos carregando os dados das partidas do Counter Strike a partir do arquivo
+
+```{r}
+table <- read.csv(file.path(getwd(), "mm_master_demos.csv"))
+```
+
+# Análise dos Mapas
+
+Aqui, vamos calcular as estatísticas relacionadas aos mapas jogados no Counter Strike.
+
+```{r}
+prct <- round(prop.table(table(table$map))*100, 2)
+qnty <- table(table$map)
+
+```
+
+## Tabela de Estatísticas por Mapa
+
+Abaixo, apresentamos a tabela com as estatísticas obtidas:
+
+```{r}
+df <- data.frame(prct, qnty)
+df <- df[, -3]
+names(df) <- c("Mapas", "Porcentagem", "Quantidade")
+df <- df[order(df$Quantidade, decreasing = TRUE), ]
+print(df)
+```
+
+# Conclusão
+
+Com base na análise realizada, conseguimos obter insights sobre a distribuição de rounds jogados por mapa no Counter Strike. Essas informações podem ser úteis para compreender a dinâmica das partidas e identificar tendências nos mapas mais jogados.
