@@ -1,0 +1,489 @@
+---
+title: "Regulamentação dos Cassinos no Brasil"
+author:
+- Pedro Paulo S. Rabelo
+- João Victor R. V. Godoi
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+### 1.Introdução
+
+No Brasil o jogos de Azar faz parte de nossa cultura a varias décadas, porém em 30 de abril de 1946, foi assinado pelo Presidente Eurico Gaspar Dutra o [Decreto-Lei nº 9.215](https://www.planalto.gov.br/ccivil_03/decreto-lei/del9215.htm), argumentando que o jogo de azar era degradante para o ser humano. Muitos dizem que essa decisão pode ter sido por forte influencia da primeira-dama Camela Dutra, que era extremamente devota à Igreja Católica, que por sua vez repudia até os tempos moderno os jogos de azar.
+
+Essa decisão teve uma grande impacto econômico na época, devido ao fato de que o Brasil possuía muitas casas de apostas, movimentando muito dinheiro e gerando muitos empregos tanto diretamente como indiretamente. Grande parte dos países que proíbem os cassinos são do mundo islâmico, o Brasil junto de Cuba e Islândia, é um dos poucos países não islâmicos que proíbe cassinos em seu território.
+
+Contudo, em 21 de Março de 1991, no Plenário foi apresentado um novo [Projeto de Lei n. 442/1991](https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=15460), pelo Deputado Renato Vianna (PMDB-SC), que: "Revoga os dispositivos legais que menciona , referentes à prática do 'jogo do bicho', sendo deferido em 28 de novembro de 1995, solicitando o encaminhamento do projeto a comissão especial referente aos jogos e a regulamentação dos cassinos no Brasil. O Projeto de Lei ficou sem discussão até 2008, onde A Deputada Pereira(PR-CE), apresenta o [Requerimento nº 3219/2008](https://www.camara.leg.br/proposicoesWeb/prop_mostrarintegra?codteor=1056736&filename=Tramitacao-PL%20442/1991)na [Ordem do Dia](https://www.congressonacional.leg.br/legislacao-e-publicacoes/glossario-legislativo/-/legislativo/termo/ordem_do_dia), da [PL 442/91](https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=15460).
+
+Nesse processo a PL ficou sem atualizações até 2015. Durante o governo de Michel Temer(PMDB-SP), foi assinado pelo mesmo um decreto autorizando casa de apostas no brasil sediada em outros países voltada para temáticas esportivas por meio da [lei 13.756](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/L13756.htm), tendo grande repercussão na mídia. Com a grande ascensão das "Sports Bet", ficou claro que o mercado é bastante lucrativo movimentando bilhões de reais por ano, mas sem impostos Brasileiros sobre.
+
+Em meados de Dezembro de 2021 o Projeto de Lei voltou a possuir atualizações onde foi aprovado [requerimento n. 5358/2016](https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=2114626), que coloca a PL 442 em urgência. Pelo ocorridos anteriormente, no dia 23 de fevereiro de 2022, uma votação para retirar a discussão da [PL 442/91](https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=15460) da pauta foi negada. Posteriormente no mesmo ano o [Projeto de Lei n. 442/1991](https://www.camara.leg.br/proposicoesWeb/fichadetramitacao?idProposicao=15460) foi aprovado na Câmara dos Deputados do Brasil, que seguiu para votação no Senado. onde permanece desde então. A medida inclui cassinos, bingos, jogos do bicho e jogos online, entre outros.
+
+Através dos projetos de Leis relacionados a regulamentação dos cassinos online no Brasil, iremos tentar identificar a opinião popular e a opinião dos parlamentares sobre esse tema.
+
+### 2. Extração dos dados
+
+Iremos adquirir os dados através de uma [enquete do PL 442/1991](https://www.camara.leg.br/enquetes/15460/resultados) da câmara dos deputados para a população.
+
+#### 2.1 Carregar bibliotecas
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(openssl)
+library(readr)
+library(tm)
+library(syuzhet)
+library(lexRankr)
+library(SnowballC)
+library(e1071)
+library(caret)
+
+library(dplyr)
+library(tidytext)
+library(textdata)
+library(stringr)
+library(wordcloud)
+library(reshape2)
+
+library(lexiconPT)
+library(remotes)
+
+
+library(topicmodels)
+
+
+library(translateR)
+```
+
+#### 2.2 Carregar planilha
+
+Carregaremos a planilha com os comentários do povo.
+
+Como o arquivo não estava realmente formatado com as colunas certas, realizei a divisão das colunas atraves das 5 primeiras virgulas e também retirei caracteres desnecessário que era usado constantemente
+
+```{r}
+# Ler o arquivo
+linhas <- readLines("posicionamentos15460.csv")[-1]
+
+# Remover as aspas duplas
+linhas <- gsub('"', '', linhas)
+
+#Removendo irregularidades
+linhas <- gsub(';;;', '', linhas)
+linhas <- gsub('”', '', linhas)
+linhas <- gsub('“', '', linhas)
+
+# Função para dividir uma linha nas primeiras 5 vírgulas
+dividir_linha <- function(linha) {
+  partes <- strsplit(linha, ",")[[1]]
+  c(partes[1:4], paste(partes[5:length(partes)], collapse = ","))
+}
+
+# Aplicar a função a cada linha
+dados <- do.call("rbind", lapply(linhas, dividir_linha))
+
+# Converter para data.frame
+dados <- as.data.frame(dados, stringsAsFactors = FALSE)
+
+# Usar a primeira linha como nomes das colunas
+names(dados) <- dados[1,]
+
+# Remover a primeira linha
+dados <- dados[-1,]
+
+# Reindexar as linhas
+rownames(dados) <- 1:nrow(dados)
+
+#Deletando variavel que não será mais usada
+rm(linhas)
+
+```
+
+### 3. Resumo
+
+Após manipular os dados, iremos pegar o resumos dos comentários. Iremos filtrar os comentários mais "importante"
+
+```{r}
+# Aplicar LexRank para gerar o resumo
+resumo <- lexRank(text = dados[,5], docId = "create", threshold = 0.2, n = 15, returnTies = TRUE, usePageRank = TRUE, damping = 0.85, continuous = FALSE, sentencesAsDocs = FALSE, removePunc = TRUE, removeNum = TRUE, toLower = TRUE, stemWords = TRUE, rmStopWords = TRUE, Verbose = TRUE)
+
+```
+
+### 4. Manipulação de Dados
+
+Aqui estamos manipulando os dados para podermos facilitar em nossas analises futuras
+
+#### 4.1 Mais Stop Words
+
+Adicionando mais Stop Words para o dicionário que iremos utilizar depois.
+
+```{r}
+adiconal_stopWords <- c("é", "pra", "pro", "vc", "vcs", "de", "a", "o", "que", "e", "é", "do", "da", "em", "um", "para", "com", "não", "uma", "os", "no", "se", "na", "por", "mais", "as", "dos", "como", "mas", "ao", "ele", "das", "à", "seu", "sua", "ou", "quando", "muito", "nos", "já", "eu", "também", "só", "pelo", "pela", "até", "isso", "ela", "entre", "depois", "sem", "mesmo", "aos", "seus", "quem", "nas", "me", "esse", "eles", "você", "essa", "num", "nem", "suas", "meu", "às", "minha", "numa", "pelos", "elas", "qual", "nós", "lhe", "deles", "essas", "esses", "pelas", "este", "dele", "tu", "te", "vocês", "vos", "lhes", "meus", "minhas", "teu", "tua", "teus", "tuas", "nosso", "nossa", "nossos", "nossas", "dela", "delas", "esta", "estes", "estas", "aquele", "aquela", "aqueles", "aquelas", "isto", "aquilo", "estou", "está", "estamos", "estão", "estive", "esteve", "estivemos", "estiveram", "estava", "estávamos", "estavam", "estivera", "estivéramos", "esteja", "estejamos", "estejam", "estivesse", "estivéssemos", "estivessem", "estiver", "estivermos", "estiverem", "hei", "há", "havemos", "hão", "houve", "houvemos", "houveram", "houvera", "houvéramos", "haja", "hajamos", "hajam", "houvesse", "houvéssemos", "houvessem", "houver", "houvermos", "houverem", "houverei", "houverá", "houveremos", "houverão", "houveria", "houveríamos", "houveriam", "sou", "somos", "são", "era", "éramos", "eram", "fui", "foi", "fomos", "foram", "fora", "fôramos", "seja", "sejamos", "sejam", "fosse", "fôssemos", "fossem", "for", "formos", "forem", "serei", "será", "seremos", "serão", "seria", "seríamos", "seriam", "tenho", "tem", "temos", "tém", "tinha", "tínhamos", "tinham", "tive", "teve", "tivemos", "tiveram", "tivera", "tivéramos", "tenha", "tenhamos", "tenham", "tivesse", "tivéssemos", "tivessem", "tiver", "tivermos", "tiverem", "faz", "vá", "acho", "corrida", "dizer", "etc", "lá", "nessa", "outras", "passo", "quer", "quiser", "rumo", "sempre", "senhores", "ser", "cavalos", "ludopatia", "vários", "tratar", "deve", "vamos", "deixar", "forma")
+```
+
+#### 4.2 Limpando os dados
+
+Aqui estamos limpando os dados das sentenças
+
+-   Transformando para caixa baixa
+-   Removendo pontuação
+-   Removendo Numeros
+-   Removendo Stop Words
+
+```{r}
+
+texto <- resumo[,3]
+
+# Aplicar LexRank para gerar o resumo
+
+# Crie um corpus
+corpus <- Corpus(VectorSource(texto))
+
+# Pré-processamento de texto
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords("portuguese"))
+corpus <- tm_map(corpus, removeWords, adiconal_stopWords)
+
+
+
+
+texto_char <- sapply(corpus, as.character)
+```
+
+### 5 Extrações
+
+Aqui iremos aplicar algumas tecnicas que iremos realizar algumas extrações e manipulações nos conteúdos extraidos
+
+#### 5.1 Tokenização
+
+Aqui iremos realizar a tokenização das palavras do texto para podermos utilizar posteriormente.
+
+Teremos 2 dataframe
+
+-   token_df = Com a quantidade de vezes que foi usado em cada sentença
+-   tokensrow = Somente os dados
+
+```{r}
+
+tk <- DocumentTermMatrix(corpus)
+
+token_df <- as.data.frame(as.matrix(tk))
+
+# print(tk)
+
+tokensrow <- data.frame(tokens = tk[["dimnames"]][["Terms"]])
+```
+
+#### 5.2 Word Steamming
+
+No word steamming, iremos pegar o radical das palvras que estão em nossos resumos
+
+```{r}
+
+corpusClone <- corpus
+
+
+#Alternativa
+corpusClone <- tm_map(corpus, stemDocument, language = "portuguese")
+
+
+# Use a função wordStem para realizar o stemming
+stems <- wordStem(colnames(token_df), language = "portuguese")
+
+# Imprima os resultados
+#print(stems)
+```
+
+### 6. Analise De Sentimentos
+
+Aqui iremos realizar a analise de sentimentos dos nossos resumos
+
+Adicionando dicionario proprio
+
+```{r}
+
+meu_dicionario <- data.frame(read.csv("dicionario.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE))
+```
+
+Aqui iremos utilizar o LexiconPT para o dicionário em português com o sentimento de cada palavra
+
+```{r}
+
+get_polaridade <- function(x) {
+  sentimento <- get_word_sentiment(x)
+  texto <- "Word not present in dataset"
+  polaridades <- c(ifelse(sentimento$oplexicon_v3.0 == texto, 0, sentimento$oplexicon_v3.0$polarity),
+                   ifelse(sentimento$sentilex == texto, 0, sentimento$sentilex$polarity), meu_dicionario$sentimento[match(x, meu_dicionario$token)])
+  return(sign(sum(polaridades)))
+}
+
+get_polaridade_vec <- Vectorize(get_polaridade, SIMPLIFY = FALSE)
+
+
+
+tokensrow$sentimento <- get_polaridade_vec(tokensrow$tokens)
+
+
+```
+
+```{r}
+
+
+# Seu dataframe de dicionário de sentimentos
+dicionario <- tokensrow
+
+# Lista de frases para analisar
+frases <- c(texto_char)
+
+
+calcular_sentimento <- function(frase, dicionario) {
+  palavras <- unlist(strsplit(frase, " ")) # Divide a frase em palavras
+  sentimentos <- sapply(palavras, function(palavra) {
+    sentimento <- dicionario$sentimento[match(palavra, dicionario$tokens)]
+    if (is.na(sentimento)) 0 else sentimento # Se a palavra não estiver no dicionário, considera sentimento neutro (0)
+  }, simplify = TRUE) # Garante que o resultado seja um vetor numérico
+  sum(unlist(sentimentos)) # Soma os sentimentos das palavras após achatar a lista
+}
+
+
+# Aplicar a função a cada frase
+sentimentos_frases <- sapply(frases, calcular_sentimento, dicionario)
+
+# O resultado é um vetor com a soma dos sentimentos de cada frase
+print(sentimentos_frases)
+```
+
+### 7. Categorização
+
+```{r}
+
+
+#
+ap_lda <- LDA(tk, k = 2, control = list(seed = 4123215))
+ap_lda
+
+ap_topics <- tidy(ap_lda, matrix = "beta")
+ap_topics
+
+
+```
+
+```{r}
+
+ap_top_terms <- ap_topics %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+ap_top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered()
+
+
+
+
+```
+
+```{r}
+
+beta_wide <- ap_topics %>%
+  mutate(topic = paste0("topic", topic)) %>%
+  pivot_wider(names_from = topic, values_from = beta) %>% 
+  filter(topic1 > .001 | topic2 > .001) %>%
+  mutate(log_ratio = log2(topic2 / topic1))
+
+beta_wide
+```
+
+```{r}
+ap_documents <- tidy(ap_lda, matrix = "gamma")
+ap_documents
+```
+
+```{r}
+tidy(AssociatedPress) %>%
+  filter(document == 6) %>%
+  arrange(desc(count))
+```
+
+### INGLÊS
+
+#### Tradutor Português para Inglês
+
+```{r}
+
+
+word_to_string <- function(word) {
+
+  url <- "https://translated-mymemory---translation-memory.p.rapidapi.com/get"
+  
+  queryString <- list(
+  	langpair = "pt|en",
+  	q = word,
+  	mt = "1",
+  	onlyprivate = "0",
+  	de = "a@b.c"
+  )
+  
+  response <- VERB("GET", url, query = queryString, add_headers('X-RapidAPI-Key' = 'a2a35dfdd7msh6537652d7b0d2d2p1c9b3ajsn40e990afbe91', 'X-RapidAPI-Host' = 'translated-mymemory---translation-memory.p.rapidapi.com'), content_type("application/octet-stream"))
+  
+  json_string <- content(response, "text")
+  
+  json_data <- fromJSON(json_string)
+  
+  palavra_traduzida <- json_data[[1]]$translatedText
+  
+  palavra_traduzida <- gsub('"', '', palavra_traduzida)
+  
+  return(palavra_traduzida)
+  
+}
+
+```
+
+```{r}
+
+minha_lista <- dados[,5]
+
+# Inicialize a nova lista
+nova_lista <- numeric(length(minha_lista))
+
+
+# Use um loop for para iterar sobre os elementos da lista
+for (i in seq_along(minha_lista)) {
+  nova_lista[i] <- word_to_string(minha_lista[i])
+}
+
+# Verifique o conteúdo da nova lista
+nova_lista
+
+```
+
+#### RESUMO
+
+```{r}
+# Aplicar LexRank para gerar o resumo
+summary_en <- lexRank(text = nova_lista, docId = "create", threshold = 0.2, n = 15, returnTies = TRUE, usePageRank = TRUE, damping = 0.85, continuous = FALSE, sentencesAsDocs = FALSE, removePunc = TRUE, removeNum = TRUE, toLower = TRUE, stemWords = TRUE, rmStopWords = TRUE, Verbose = TRUE)
+
+```
+
+#### Categorização
+
+Aqui estamos limpando os dados das sentenças
+
+-   Transformando para caixa baixa
+-   Removendo pontuação
+-   Removendo Numeros
+-   Removendo Stop Words
+
+```{r}
+
+texto_en <- summary_en[,3]
+
+# Aplicar LexRank para gerar o resumo
+
+# Crie um corpus
+corpus_en <- Corpus(VectorSource(texto_en))
+
+# Pré-processamento de texto
+corpus_en <- tm_map(corpus_en, content_transformer(tolower))
+corpus_en <- tm_map(corpus_en, removePunctuation)
+corpus_en <- tm_map(corpus_en, removeNumbers)
+corpus_en <- tm_map(corpus_en, removeWords, stopwords("english"))
+
+
+
+
+texto_char_en <- sapply(corpus_en, as.character)
+
+dtm_en <- DocumentTermMatrix(corpus_en)
+```
+
+### 6. Analise De Sentimentos
+
+Aqui iremos realizar a analise de sentimentos dos nossos resumos
+
+```{r}
+
+get_polaridade <- function(x) {
+  sentimento <- get_word_sentiment(x)
+  texto <- "Word not present in dataset"
+  polaridades <- c(ifelse(sentimento$oplexicon_v3.0 == texto, 0, sentimento$oplexicon_v3.0$polarity),
+                   ifelse(sentimento$sentilex == texto, 0, sentimento$sentilex$polarity))
+  return(sign(sum(polaridades)))
+}
+
+get_polaridade_vec <- Vectorize(get_polaridade, SIMPLIFY = FALSE)
+
+
+sentencesDF_en <- data.frame(sentences = summary_en[,3])
+
+
+sentencesDF_en$sentimento <- get_polaridade_vec(sentencesDF$sentences)
+
+```
+
+### 7. Categorização
+
+```{r}
+
+
+#
+ap_lda_en <- LDA(dtm_en, k = 5, control = list(seed = 4123215))
+#ap_lda_en
+
+ap_topics_en <- tidy(ap_lda_en, matrix = "beta")
+#ap_topics_en
+
+
+```
+
+```{r}
+
+ap_top_terms_en <- ap_topics_en %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+ap_top_terms_en %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  scale_y_reordered()
+
+
+
+
+```
+
+```{r}
+
+beta_wide_en <- ap_topics_en %>%
+  mutate(topic = paste0("topic", topic)) %>%
+  pivot_wider(names_from = topic, values_from = beta) %>% 
+  filter(topic1 > .001 | topic2 > .001) %>%
+  mutate(log_ratio = log2(topic2 / topic1))
+
+beta_wide_en
+```
+
+```{r}
+ap_documents_en <- tidy(ap_lda_en, matrix = "gamma")
+```
+
+```{r}
+tidy(AssociatedPress) %>%
+  filter(document == 6) %>%
+  arrange(desc(count))
+```
